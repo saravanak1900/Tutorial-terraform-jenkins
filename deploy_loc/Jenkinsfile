@@ -1,0 +1,307 @@
+pipeline {
+    agent any
+    parameters {
+
+    string(name: 'CLIENT_NAME', defaultValue: 'REPONAME', description: 'Client Name')
+    string(name: 'VPC_RANGE', defaultValue: '', description: 'Manage vpc cidr range?')
+    string(name: 'RUN_TYPE', defaultValue: 'plan', description: 'Terraform Run Type. For example "plan" or "apply".')
+    string(name: 'ENVIRONMENT', defaultValue: 'prod', description: 'This could be dev, sit, uat or prod')
+    string(name: 'DEPLOYMENT_REGION', defaultValue: 'us-east-1', description: 'Region')
+    booleanParam(name: 'USERINPUT', defaultValue: true, description: 'Generate values for Variables for Client Env')
+    booleanParam(name: 'VPC', defaultValue: true, description: 'Manage customer vpc?')
+    booleanParam(name: 'KMS', defaultValue: true, description: 'Manage customer managed key?')
+    booleanParam(name: 'S3', defaultValue: true, description: 'Manage customer managed S3 Artifacts?')
+    booleanParam(name: 'IAM', defaultValue: true, description: 'Manage customer managed IAM User?')
+    booleanParam(name: 'User', defaultValue: true, description: 'Refresh KMS key policy post  IAM User creation')
+    booleanParam(name: 'KEY_PAIR', defaultValue: true, description: 'Manage key pair?')
+    booleanParam(name: 'SG', defaultValue: true, description: 'Manage security groups?')
+    booleanParam(name: 'EC2', defaultValue: true, description: 'Manage EC2?')
+    booleanParam(name: 'LINUXDBS', defaultValue: true, description: 'Manage EC2 Database ?')
+    booleanParam(name: 'LINUXHAPX', defaultValue: false, description: 'Manage EC2 HA proxy Server?')
+    booleanParam(name: 'R7SCAN', defaultValue: true, description: 'Manage EC2 R7 scanner - vulnerabilitry scanner server?')
+    booleanParam(name: 'SGJBX', defaultValue: true, description: 'Applying all JBs IPs')
+    booleanParam(name: 'ANSPLAYBOOK', defaultValue: false, description: 'Manage EC2')
+    booleanParam(name: 'RESOURCES', defaultValue: false, description: 'New Resources created for client')
+  }
+  stages {
+
+
+	stage('INPUTVALUES') {
+       		when {
+         		expression { params.USERINPUT == true }
+       		}
+       		steps {
+           		
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x /root/project-scripts-bash/generatefiles.sh
+             			/root/project-scripts-bash/generatefiles.sh $ENVIRONMENT $VPC_RANGE $DEPLOYMENT_REGION $CLIENT_NAME  $FINCODE $COUNT
+             			'''
+           		}
+
+       		}
+    	}
+	stage('VPC') {
+       		when {
+         		expression { params.VPC == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME input-vpc
+             			'''
+           		}
+
+       		}
+    	}
+	stage('KMS') {
+       		when {
+         		expression { params.KMS == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME input-kms
+             			'''
+           		}
+
+       		}
+   	 }
+	stage('S3') {
+       		when {
+         		expression { params.S3 == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME input-s3
+             			'''
+           		}
+
+       		}
+   	 }
+	stage('IAM') {
+       		when {
+         		expression { params.IAM == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME input-iam
+             			'''
+           		}
+
+       		}
+   	 }
+	stage('KMS Refresh') {
+               when {
+                 expression { params.User == true }
+               }
+               steps {
+                   checkout scm
+                   script {
+                         sh '''#!/bin/bash
+                         set -e
+                   	 chmod +x deploy_loc/terraform.sh
+                         cp -r /root/automation-projects/$CLIENT_NAME/kms/refresh/* /root/automation-projects/$CLIENT_NAME/kms/
+                         deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME input-kms
+                         '''
+                   }
+
+ 
+
+               }
+        }
+
+    	stage('KEY PAIR') {
+       		when {
+         		expression { params.KEY_PAIR == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME input-key-pair
+             			'''
+           		}
+
+       		}
+    	}
+    	stage('SG') {
+       		when {
+         		expression { params.SG == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME input-security-groups
+             			'''
+           		}
+
+       		}
+    	}
+    	stage('EC2 Jump') {
+       		when {
+         		expression { params.EC2 == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME hosts input-windows-jumpbox
+             			'''
+           }
+       }
+    }
+    	stage('EC2 Linux DBM') {
+       		when {
+         		expression { params.LINUXDBS == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME hosts input-linux-dbs
+             			'''
+           }
+       }
+    }
+   stage('EC2 R7SCAN') {
+       		when {
+         		expression { params.R7SCAN == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME hosts input-windows-r7scan
+             			'''
+           }
+       }
+    }
+   stage('EC2 Linux HA') {
+       		when {
+         		expression { params.LINUXHAPX == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME hosts input-linux-hapx
+             			'''
+           }
+       }
+    }
+
+   stage('Security Group for Jump Boxes') {
+       		when {
+         		expression { params.JBIPS == true }
+       		}
+       		steps {
+           		checkout scm
+           		script {
+             			sh '''#!/bin/bash
+             			set -e
+             			chmod +x deploy_loc/terraform.sh
+                                cp /root/automation-projects/template12/application-0.tf /root/automation-projects/$CLIENT_NAME/security-groups/application-0.tf 
+             			deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME security-groups
+             			'''
+           		}
+
+       		}
+    	}
+ 
+      stage('SG JB') {
+               when {
+                 expression { params.SGJBX == true }
+               }
+               steps {
+                   checkout scm
+                   script {
+                         sh '''#!/bin/bash
+                         set -e
+                   	 chmod +x deploy_loc/terraform.sh
+                         cp /root/automation-projects/$CLIENT_NAME/application-0.tf /root/automation-projects/$CLIENT_NAME/security-groups/application-0.tf
+                         deploy_loc/terraform.sh $RUN_TYPE $ENVIRONMENT $DEPLOYMENT_REGION $CLIENT_NAME security-groups
+                         '''
+                   }
+
+ 
+
+               }
+        }
+   stage('EC2 Ansible Config') {
+                when {
+                        expression { params.ANSPLAYBOOK == true }
+                }
+                steps {
+			 checkout scm
+                        script {
+                                sh '''#!/bin/bash
+                                set -e
+                                chmod +x deploy_loc/terraform.sh
+                                 /root/project-scripts-bash/aws-instances.sh $ENVIRONMENT  $CLIENT_NAME $DEPLOYMENT_REGION
+                                '''
+           }
+       }
+    }
+
+   stage('AWS Resources Created') {
+                when {
+                        expression { params.RESOURCES == true }
+                }
+                steps {
+                script {
+                   sh '''#!/bin/bash
+                set -e
+                 echo "Sending email with information for the new resources"
+                 /root/project-scripts-bash/awsreport-details.sh  $ENVIRONMENT  $CLIENT_NAME $DEPLOYMENT_REGION
+                 '''
+                }
+             ansibleANSPLAYBOOK([
+                              ANSPLAYBOOK        : '/root/ansible-scripts/send-email.yml',
+                              inventory       : "/root/ansible-scripts/hosts",
+                              extraVars       : [
+                                client: "$params.client",
+                  
+                                        ] 
+                        ]) 
+
+       }
+    }
+
+
+
+  }
+  post {
+	always {
+		cleanWs()
+	}
+  }
+}
